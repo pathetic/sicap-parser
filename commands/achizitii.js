@@ -29,7 +29,7 @@ function Achizitii({ date, host, index, concurrency, archive }) {
   const processDay = async () => {
     const [dd, mm, yyyy] = date.split("-")
 
-    const response = await fetch("http://raw.githubusercontent.com/arhiva-sicap/sicap-parser/master/cpvs.txt")
+    const response = await fetch("https://raw.githubusercontent.com/arhiva-sicap/sicap-parser/master/cpvs.txt")
     const cpvsTxt = await response.text()
     const cpvs = cpvsTxt.split("\n").map((line) => line.split("|")[0])
 
@@ -39,17 +39,35 @@ function Achizitii({ date, host, index, concurrency, archive }) {
       .for(cpvs)
       .withConcurrency(concurrency)
       .process(async (cpvCodeId) => {
-        const contracts = await getAllDirect(`${yyyy}-${mm}-${dd}`, { cpvCodeId, istoric: archive })
-        setCurrentCpv((c) => c + 1)
+        let pageIndex = 0
+        let allItems = []
+        let contractsTotal = 0
 
-        if (contracts.searchTooLong) {
-          fs.appendFileSync("log-all-toolong.txt", `${cpvCodeId}|${date}\n`)
+        while (true) {
+          const contracts = await getAllDirect(`${yyyy}-${mm}-${dd}`, { cpvCodeId, istoric: archive, pageIndex })
+
+          if (contracts.searchTooLong) {
+            fs.appendFileSync("log-all-toolong.txt", `${cpvCodeId}|${date}\n`)
+          }
+
+          contractsTotal = contracts.total
+          if (contracts.items && contracts.items.length > 0) {
+            allItems = allItems.concat(contracts.items)
+          }
+
+          if (allItems.length >= contracts.total || !contracts.items || contracts.items.length === 0) {
+            break
+          }
+
+          pageIndex++
         }
 
-        if (contracts.total > 0) {
-          setTotal((t) => t + contracts.total)
+        setCurrentCpv((c) => c + 1)
 
-          for (const item of contracts.items) {
+        if (contractsTotal > 0) {
+          setTotal((t) => t + contractsTotal)
+
+          for (const item of allItems) {
             setCurrent((c) => c + 1)
             setElapsed(prettyMs(getDurationInMilliseconds(start), { secondsDecimalDigits: 0 }))
 
